@@ -1,0 +1,60 @@
+﻿@model IEnumerable<StationViewModel>
+@{
+}
+
+<h3>Buscar Estación</h3>
+<form method="post">
+    <input 
+        type="text" 
+        name="search" 
+        placeholder="Ingrese el nombre de la estación" class="form-control mb-2" 
+        />
+        <button type="submit" class="btn btn-primary mt-2">Buscar</button>
+</form>
+<div>
+    @if (TempData["Message"] != null)
+    {
+        <div class="alert alert-@TempData["MessageType"] role="alert">
+            @TempData["Message"]
+        </div>
+    }
+</div>
+<table id="stationsTable" class="table table-bordered table-striped">
+    <thead>
+        <tr>
+            <th>CR</th>
+            <th>LS</th>
+            <th>Nombre</th>
+            <th>Estación</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var station in Model)
+        {
+            <tr>
+                <td>@station.CR</td>
+                <td>@station.LS</td>
+                <td>@station.Nombre</td>
+                <td>@station.Estacion</td>
+            </tr>
+        }
+    </tbody>
+</table>
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#stationsTable').DataTable({
+                "pageLength": 10,
+                "language": {
+                    "search": "Buscar estación:",
+                    "lengthMenu": "Mostrar _MENU_ registros",
+                    "info": "Mostrando _START_ a _END_ de _TOTAL_ estaciones",
+                    "paginate": {
+                        "next": "Siguiente",
+                        "previous": "Anterior"
+                    }
+                }
+            });
+        });
+    </script>
+}

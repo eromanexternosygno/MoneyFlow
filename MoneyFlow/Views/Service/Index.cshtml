@@ -1,5 +1,66 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
+﻿@model List<MoneyFlow.Models.ServiceViewModel>
 @{
 }
+
+<div class="row">
+    <div class="col-sm-6">
+        <h2>Services</h2>
+    </div>
+    <div class="col-sm-6 text-end">
+        <a href="/Service/Create" class="btn btn-success">New Service</a>
+    </div>
+</div>
+<hr />
+<div class="row">
+    <!--Alert-->
+    @if (TempData["Message"] != null)
+    {
+        <div class="alert alert-@TempData["MessageType"] role="alert">
+            @TempData["Message"]
+        </div>
+    }
+    <div class="col-sm-12">
+        <table class="table table-bordered table-striped">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Description Type</th>
+                    <th style="width:150px">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var service in Model)
+                {
+                    <tr>
+                        <td>@service.Name</td>
+                        <td>@service.Type</td>
+                        <td style="width:150px">
+                            <a href="Service/Detail/@service.ServiceId" class="btn btn-primary btn-sm">Edit</a>
+                            <button 
+                                type="button" 
+                                class="btn btn-danger btn-sm"
+                                data-bs-toggle="modal"
+                                data-bs-target="#deleteModal"
+                                data-id="@service.ServiceId"
+                                data-name="@service.Name"
+                                >
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <!--Delete Modal-->
+    <div></div>
+</div>
+@* @section Scripts{
+    <script>
+        function deleteitem(serviceId){
+            if( confirm(`Are you sure to delete Service:${serviceId}`)){
+                window.location.href = '@Url.Action("Delete", "Service")' + '?id='+ serviceId;
+            }
+        }
+    </script>
+} *@
