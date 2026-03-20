@@ -53,14 +53,53 @@
         </table>
     </div>
     <!--Delete Modal-->
-    <div></div>
+    <div class="modal fade" id="deleteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+
+                <form asp-action="Delete" asp-controller="Service" method="post">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Confirm Delete</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <input type="hidden" id="deleteId" name="id" />
+                        <p id="deleteMessage"></p>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-danger">
+                            Confirm Delete
+                        </button>
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+    </div>
 </div>
-@* @section Scripts{
+@section Scripts {
     <script>
-        function deleteitem(serviceId){
-            if( confirm(`Are you sure to delete Service:${serviceId}`)){
-                window.location.href = '@Url.Action("Delete", "Service")' + '?id='+ serviceId;
-            }
-        }
+        var deleteModal = document.getElementById('deleteModal');
+
+        deleteModal.addEventListener('show.bs.modal', function (event) {
+
+            var button = event.relatedTarget;
+
+            var serviceId = button.getAttribute('data-id');
+            var serviceName = button.getAttribute('data-name');
+
+            var hiddenInput = deleteModal.querySelector('#deleteId');
+            var message = deleteModal.querySelector('#deleteMessage');
+
+            hiddenInput.value = serviceId;
+            message.textContent = "¿Estás seguro que deseas eliminar el servicio: " + serviceName + "?";
+        });
     </script>
-} *@
+}

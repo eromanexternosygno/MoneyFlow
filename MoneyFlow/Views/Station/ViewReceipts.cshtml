@@ -1,0 +1,339 @@
+﻿@model IEnumerable<ReceiptViewModel>
+@{
+    ViewData["Title"] = "Instance Receipts";
+}
+
+<div class="container mt-4">
+    <h2>Instance Receipts: <span class="badge bg-secondary">@ViewBag.LS</span></h2>
+
+    <form method="get" class="row g-3 mb-4">
+        <input type="hidden" name="ls" value="@ViewBag.LS" />
+        <div class="col-md-6">
+            <label class="form-label">Buscar por ReceiptId (Separa por comas para varios)</label>
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="text"
+                       name="receiptIds"
+                       class="form-control"
+                       value="@ViewBag.CurrentSearch"
+                       placeholder="Ejemplo: 101, 105, 210" />
+                <button type="submit" class="btn btn-primary">Consultar</button>
+            </div>
+            <div class="form-text">Si se deja vacío, traerá todos los recibos.</div>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        @if (ViewBag.Message != null)
+        {
+            <div class="alert alert-danger" role="alert">
+                @ViewBag.Message
+            </div>
+        }
+        <div class="d-flex justify-content-between mb-3">
+            <h4>Listado de Recibos</h4>
+            <button id="btnPrepareUpdate" class="btn btn-warning" disabled>
+                <i class="bi bi-pencil-square"></i> Actualizar PO's Seleccionados (<span id="selectedCount">0</span>)
+            </button>
+        </div>
+        <table id="receiptsTable" class="table table-hover table-striped border">
+            <thead class="table-dark">
+                <tr>
+                    <th><input type="checkbox" id="selectAll" /></th>
+                    <th>ReceiptId</th>
+                    <th>StatusPO</th>
+                    <th>RecordType</th>
+                    <th>Cantidad</th>
+                    <th>ReceiptStatusId</th>
+                    <th>StatusId</th>
+                    <th>POId</th>
+                    <th>Notes</th>
+                    <th>IsFuel</th>
+                    <th>CreatredBy</th>
+                    <th>Creatred</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        @* <td><input type="checkbox" class="po-check" value="@item.POId" /></td> *@
+                        <td>
+                            @if (item.IsProcessed)
+                            {
+                                <i class="bi bi-check-circle-fill text-success" title="Ya corregido"></i>
+                            }
+                            else
+                            {
+                                <input type="checkbox" class="po-check" value="@item.POId" />
+                            }
+                        </td>
+                        <td>@item.ReceiptId</td>
+                        <td>
+                            <span class="badge @(item.IsProcessed ? "bg-success" : "bg-light text-dark")">
+                                @item.POId
+                            </span>
+                        </td>
+                        <td>@item.Description</td>
+                        <td>@item.Quantity.ToString("N2")</td>
+                        <td>@item.ReceiptStatusId</td>
+                        <td>@item.StatusId</td>
+                        <td><span class="badge bg-light text-dark">@item.POId</span></td>
+                        <td>@item.Notes</td>
+                        <td>@item.IsFuel</td>
+                        <td>@item.CreatedBy</td>
+                        <td>@item.Created.ToString("yyyy-MM-dd HH:mm")</td>
+                        
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <!--Modal-->
+        <div class="modal fade" id="modalUpdate" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header"><h5>Actualizar Remisión Masiva</h5></div>
+                    <div class="modal-body">
+                        <p>Se actualizarán <strong id="lblCount"></strong> registros en <b>@ViewBag.LS</b></p>
+                        <div class="form-group">
+                            <label>Nueva Remisión:</label>
+                            <input type="text" id="txtNewRemission" class="form-control" placeholder="Ej: 2249200" />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" id="btnConfirmUpdate" class="btn btn-success">Guardar Cambios</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <hr />
+        <div id="containerPODetails" style="display:none;" class="card shadow-sm mt-4">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-table"></i> Vista Previa de Tabla PO (Instancia: @ViewBag.LS)</span>
+                <button class="btn btn-success btn-sm" onclick="openUpdateModal()">
+                    <i class="bi bi-check-all"></i> Aplicar Remisiones de Excel
+                </button>
+            </div>
+            <div class="card-body">
+                <table id="poDetailsTable" class="table table-sm table-bordered">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>POId</th>
+                            <th>Num OC</th>
+                            <th>Status</th>
+                            <th>Remisión Actual</th>
+                            <th class="text-primary">Nueva Remisión (Preview)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="poDetailsBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script>
+        let currentPOData = [];
+
+        $(document).ready(function () {
+            // Inicializar DataTable
+            const table = $('#receiptsTable').DataTable({
+                "language": { "url": "//cdn.datatables.net/plug-ins/1.13.4/i18n/es-ES.json" },
+                "pageLength": 50,
+                 "order": [[1, "asc"]]
+            });
+
+            // Lógica de "Seleccionar Todos"
+            $('#selectAll').on('click', function() {
+                // Buscamos solo los checkboxes visibles en la página actual de la tabla
+                const rows = table.rows({ 'search': 'applied' }).nodes();
+                $('input[type="checkbox"]', rows).prop('checked', this.checked);
+
+                const selectedCount = $('input.po-check:checked').length;
+                $('#selectedCount').text(selectedCount);
+                $('#btnPrepareUpdate').prop('disabled', selectedCount === 0);
+
+                refreshPODetails();
+            });
+
+            // Lógica para checkboxes individuales (usando delegación por DataTable)
+            $('#receiptsTable tbody').on('change', '.po-check', function() {
+                const selectedCount = $('.po-check:checked').length;
+                $('#selectedCount').text(selectedCount);
+                $('#btnPrepareUpdate').prop('disabled', selectedCount === 0);
+
+                // Si uno se desmarca, quitamos el check al "Select All"
+                if(!this.checked) {
+                    $('#selectAll').prop('checked', false);
+                }
+
+                refreshPODetails();
+            });
+        });
+
+        async function refreshPODetails() {
+            // Obtenemos los IDs marcados
+            const selectedIds = $('.po-check:checked').map(function() { return parseInt($(this).val()); }).get();
+
+            if(selectedIds.length === 0) {
+                $('#containerPODetails').hide();
+                currentPOData = [];
+                return;
+            }
+
+            try {
+                const response = await fetch('/Station/GetPODetails', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ Instance: "@ViewBag.LS", POIds: selectedIds })
+                });
+
+                if(response.ok) {
+                    currentPOData = await response.json();
+                    renderPOTable();
+                    $('#containerPODetails').show();
+                }
+            } catch (err) {
+                console.error("Error al obtener detalles:", err);
+            }
+        }
+
+        function renderPOTable(remissions = []) {
+            let html = '';
+            currentPOData.forEach((po, index) => {
+                const newRem = remissions[index] || '<span class="text-muted">Esperando Excel...</span>';
+                html += `
+                    <tr>
+                        <td>${po.poId}</td>
+                        <td>${po.numOC}</td>
+                        <td><span class="badge bg-info text-dark">${po.status}</span></td>
+                        <td><span class="badge bg-danger text-dark">${po.remission || 'NULL'}</span></td>
+                        <td class="table-primary"><strong>${newRem}</strong></td>
+                    </tr>`;
+            });
+            $('#poDetailsBody').html(html);
+        }
+
+        // --- FUNCIÓN DE EXCEL Y GUARDADO FINAL ---
+        function openUpdateModal() {
+            Swal.fire({
+                title: 'Pegar Remisiones de Excel',
+                input: 'textarea',
+                inputPlaceholder: 'Pega aquí las remisiones (una por línea)...',
+                showCancelButton: true,
+                confirmButtonText: 'Previsualizar y Guardar',
+                preConfirm: (value) => {
+                    if (!value) {
+                        Swal.showValidationMessage('Debes pegar al menos una remisión');
+                    }
+                    return value;
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    const rems = result.value.split(/[\n,]+/).map(r => r.trim()).filter(r => r !== "");
+
+                    if(rems.length !== currentPOData.length) {
+                        Swal.fire('Error', `Seleccionaste ${currentPOData.length} POs pero pegaste ${rems.length} remisiones.`, 'error');
+                        return;
+                    }
+
+                    renderPOTable(rems); // Actualizamos la vista previa
+
+                    // Preguntamos confirmación final antes del POST
+                    const confirm = await Swal.fire({
+                        title: '¿Confirmar cambios?',
+                        text: `Se actualizarán ${rems.length} registros en la estación remota.`,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#198754',
+                        confirmButtonText: 'Sí, aplicar cambios'
+                    });
+
+                    if (confirm.isConfirmed) {
+                        await sendFinalUpdate(rems);
+                    }
+                }
+            });
+        }
+
+        async function captureAndSave(moment) {
+            const element = document.getElementById('containerPODetails');
+            if (!element) return;
+
+            // Forzamos un pequeño delay para asegurar que el DOM se renderizó tras el cambio de datos
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            try {
+                const canvas = await html2canvas(element, {
+                    backgroundColor: "#ffffff",
+                    scale: 2 // Mayor calidad
+                });
+                const dataUrl = canvas.toDataURL("image/png");
+
+                await fetch('/Station/SaveEvidence', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        Instance: "@ViewBag.LS",
+                        Moment: moment,
+                        ImageData: dataUrl
+                    })
+                });
+            } catch (err) {
+                console.error("Error capturando evidencia:", err);
+            }
+        }
+
+        // --- REEMPLAZA TU FUNCIÓN sendFinalUpdate CON ESTA ---
+        async function sendFinalUpdate(remissions) {
+            // 1. CAPTURA DEL "ANTES"
+            await captureAndSave("ANTES_DE_ACTUALIZAR");
+
+            Swal.fire({
+                title: 'Procesando...',
+                text: 'Guardando evidencias y actualizando base de datos',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            const data = {
+                Instance: "@ViewBag.LS",
+                POIds: currentPOData.map(p => p.poId),
+                NewRemission: remissions.join(','),
+                OldRemission: currentPOData.map(p => p.remission || "NULL").join(',')
+            };
+
+            try {
+                const response = await fetch('/Station/ProcessFinalUpdate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    // 2. ACTUALIZACIÓN VISUAL PARA EL "DESPUÉS"
+                    // Actualizamos el objeto local para que la tabla muestre el cambio aplicado
+                    currentPOData.forEach((po, index) => {
+                        po.remission = remissions[index];
+                    });
+                    renderPOTable(remissions); // Re-pintamos la tabla con los nuevos valores
+
+                    // 3. CAPTURA DEL "DESPUÉS" (Esperamos a que se pinte el cambio)
+                    await captureAndSave("DESPUES_DE_ACTUALIZAR");
+
+                    Swal.fire('Éxito', 'Proceso terminado. Evidencias guardadas en C:\\AppReceiptsEvidenceStations', 'success')
+                        .then(() => location.reload());
+                } else {
+                    const error = await response.text();
+                    Swal.fire('Error', 'No se pudo actualizar: ' + error, 'error');
+                }
+            } catch (err) {
+                Swal.fire('Error', 'Error de conexión: ' + err.message, 'error');
+            }
+        }
+    </script>
+}

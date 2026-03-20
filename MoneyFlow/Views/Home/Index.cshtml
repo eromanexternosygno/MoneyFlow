@@ -3,6 +3,9 @@
 }
 
 <div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+    @if(User.Identity!.IsAuthenticated)
+    {
+        <h1 class="display-4">Welcome, @User.Claims.Where(c => c.Type == ClaimTypes.Name).Select(c => c.Value).SingleOrDefault()</h1>
+        <p class="lead">You are logged in. Explore your dashboard and manage your finances.</p>
+    }
 </div>

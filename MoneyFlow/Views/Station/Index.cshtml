@@ -3,13 +3,29 @@
 }
 
 <h3>Buscar Estación</h3>
-<form method="post">
-    <input 
-        type="text" 
-        name="search" 
-        placeholder="Ingrese el nombre de la estación" class="form-control mb-2" 
-        />
-        <button type="submit" class="btn btn-primary mt-2">Buscar</button>
+<form method="post" class="mb-4">
+    <div class="form-control mb-4">
+        <div class="input-group">
+            <input type="text" name="search" placeholder="Ingrese nombre o CR..." class="form-control" />
+            <div class="input-group-append">
+                <button type="submit" class="btn btn-primary">Buscar</button>
+            </div>
+        </div>
+    </div>
+    <div class="form-control mb-4">
+        <div class="card bg-light mb-3">
+            <div class="card-body">
+                <h5><i class="bi bi-file-earmark-spreadsheet"></i> Carga Masiva desde Excel</h5>
+                <p class="small text-muted">El archivo debe tener las columnas: <b>IdEstacion, CR, LS, Nombre, FoliosTotales</b></p>
+                <input type="file" id="excelInput" class="form-control" accept=".xlsx, .xls" />
+            </div>
+        </div>
+        <div class="mt-4">
+            <button type="button" id="btnExportarExcel" class="btn btn-success btn-md" onclick="descargarReporte()">
+                <i class="bi bi-file-earmark-excel"></i> EXPORTAR RESULTADOS A EXCEL
+            </button>
+        </div>
+    </div>
 </form>
 <div>
     @if (TempData["Message"] != null)
@@ -22,25 +38,90 @@
 <table id="stationsTable" class="table table-bordered table-striped">
     <thead>
         <tr>
+            <th>IdEstation</th>
             <th>CR</th>
             <th>LS</th>
             <th>Nombre</th>
             <th>Estación</th>
+            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
         @foreach (var station in Model)
         {
             <tr>
+                <td>@station.IdEstacion</td>
                 <td>@station.CR</td>
                 <td>@station.LS</td>
                 <td>@station.Nombre</td>
                 <td>@station.Estacion</td>
+                <td>
+                    <a asp-action="GetReceipts" asp-route-ls="@station.LS" class="btn btn-sm btn-info">
+                        <i class="bi bi-receipt"></i> Ver Recibos
+                    </a>
+                    <button type="button" class="btn btn-sm btn-success"
+                            onclick="addToBulk('@station.LS', '@station.Nombre', '@station.CR')">
+                        <i class="bi bi-plus-circle"></i> Agregar a Masivo
+                    </button>
+                </td>
             </tr>
         }
     </tbody>
 </table>
+<hr />
+<div id="bulkArea" class="mt-5" style="display:none;">
+    <h4><i class="bi bi-list-check"></i> Estaciones para Procesamiento Masivo</h4>
+    <table class="table table-dark table-hover" id="selectedTable">
+        <thead>
+            <tr>
+                <th>Estación</th>
+                <th>CR</th>
+                <th width="50%">Folios (Separados por coma)</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody id="bulkBody"></tbody>
+    </table>
+    <button class="btn btn-xl btn-block btn-info" onclick="startProcessing()">
+        <i class="bi bi-play-fill"></i> PROCESAR Y DESCARGAR EXCEL
+    </button>
+</div>
+
+@* <div id="loader" class="overlay" style="display:none;">
+    <div class="spinner-border text-light" role="status" style="width: 3rem; height: 3rem;"></div>
+    <h4 class="text-white mt-3">Procesando estaciones remotas... por favor espere.</h4>
+</div> *@
+<div id="loader" class="overlay" style="display:none;">
+    <div class="container text-center">
+        <h4 class="text-white mb-4">Procesando Estaciones Remotas...</h4>
+        <div class="progress" style="height: 30px;">
+            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                 role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                0%
+            </div>
+        </div>
+        <p id="progressStatus" class="text-white mt-2">Iniciando búsqueda...</p>
+    </div>
+</div>
+
+<style>
+    .overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.8);
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+
 @section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
         $(document).ready(function () {
             $('#stationsTable').DataTable({
@@ -56,5 +137,256 @@
                 }
             });
         });
+
+        /*New Functions*/
+        // 1. Agregar a la tabla de abajo
+        let currentSearchId = null;
+
+        function addToBulk(ls, nombre, cr, folios = "") {
+            //if ($(`#row-${ls}`).length > 0) return;
+
+            $('#bulkArea').show();
+            $('#bulkBody').append(`
+                <tr id="row-${ls}" class="station-row">
+                    <td><b>${nombre}</b></td>
+                    <td>${cr}</td>
+                    <td>
+                        <textarea class="form-control folio-data" data-ls="${ls}" data-nombre="${nombre}" data-cr="${cr}" rows="1">${folios}</textarea>
+                    </td>
+                    <td class="status-cell text-center">
+                        <span class="badge badge-secondary">Pendiente</span>
+                    </td>
+                    <td>
+                        <div class="btn-group">
+                            <button class="btn btn-warning btn-sm btn-retry" style="display:none;" onclick="retrySingle('${ls}')">
+                                <i class="bi bi-arrow-repeat"></i>
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="$('#row-${ls}').remove()">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `);
+        }
+
+        // 2. Enviar todo al Manager con Spinner
+        async function startProcessing() {
+            const data = [];
+            $('.folio-data').each(function() {
+                const val = $(this).val().trim();
+                if (val !== "") {
+                    data.push({
+                        LS: String($(this).attr('data-ls')),
+                        Nombre: String($(this).attr('data-nombre')),
+                        CR: String($(this).attr('data-cr')),
+                        FoliosCsv: val
+                    });
+                }
+            });
+
+            if (data.length === 0) {
+                Swal.fire('Atención', 'Ingresa folios en al menos una estación', 'warning');
+                return;
+            }
+
+            $('#loader').show();
+            $('#progressBar').css('width', '0%').text('0%');
+
+            try {
+                // AJUSTA LA RUTA SI TU CONTROLADOR ES 'Stations'
+                const response = await fetch('/Station/ProcessBulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                currentSearchId = result.searchId;
+
+                const interval = setInterval(async () => {
+                    try {
+                        const res = await fetch(`/Station/GetProgress?searchId=${currentSearchId}`);
+                        const progress = await res.json();
+
+                        const percent = progress.percentage;
+                        $('#progressBar').css('width', percent + '%').text(percent + '%');
+                        $('#progressStatus').text(`Procesado: ${progress.current} de ${progress.total}`);
+
+                        // Marcar Errores
+                        if (progress.failedList) {
+                            progress.failedList.forEach(ls => {
+                                const row = $(`#row-${ls}`);
+                                row.addClass('table-danger');
+                                row.find('.status-cell').html('<span class="badge badge-danger">Error</span>');
+                                row.find('.btn-retry').show();
+                            });
+                        }
+                        console.log(`Accediendo a:${progress.percentage}`);
+                        if (percent >= 100) {
+                            clearInterval(interval);
+
+                            // LIMPIEZA: Quitamos las que NO están en la lista de fallidas
+                            //
+                            $('.station-row').each(function() {
+                                // Obtenemos el LS quitando el prefijo 'row-' del ID del <tr>
+                                const rowId = $(this).attr('id'); // ejemplo: "row-LS_123"
+                                const ls = rowId.replace('row-', '');
+
+                                // Si este LS NO está en la lista de fallidos, lo removemos
+                                if (!progress.failedList.includes(ls)) {
+                                    $(this).fadeOut(800, function() {
+                                        $(this).remove();
+
+                                        // Si la tabla queda vacía, podemos ocultar el área
+                                        if ($('#bulkBody tr').length === 0) {
+                                            $('#bulkArea').fadeOut();
+                                        }
+                                    });
+                                }
+                            });
+
+                            setTimeout(() => {
+                                $('#loader').fadeOut();
+                                //Clean Input xls
+                                $('#excelInput').val('');
+                                Swal.fire('Proceso Finalizado', 'Se procesaron las estaciones. Las que ves en pantalla fallaron y pueden reintentarse.', 'success');
+                            }, 2000);
+                        }
+                    } catch (e) { console.error(e); }
+                }, 1000);
+
+            } catch (err) {
+                Swal.fire('Error', 'No se pudo iniciar el proceso.', 'error');
+                $('#loader').hide();
+            }
+        }
+
+        // Funcion para event single: Send only one instance
+        async function retrySingle(ls) {
+            const row = $(`#row-${ls}`);
+            const textarea = row.find('.folio-data');
+
+            const singleData = [{
+                LS: ls,
+                Nombre: textarea.attr('data-nombre'),
+                CR: textarea.attr('data-cr'),
+                FoliosCsv: textarea.val()
+            }];
+
+            row.find('.status-cell').html('<div class="spinner-border spinner-border-sm text-warning"></div>');
+            row.find('.btn-retry').hide();
+
+            try {
+                const response = await fetch('/Station/ProcessBulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(singleData)
+                });
+
+                if (response.ok) {
+                    // Si el reintento funciona, la quitamos de la lista
+                    row.addClass('table-success').fadeOut(1000, function() { $(this).remove(); });
+                    Swal.fire('Reintento Exitoso', `Estación ${ls} procesada.`, 'success');
+                } else {
+                    row.find('.status-cell').html('<span class="badge badge-danger">Falló de nuevo</span>');
+                    row.find('.btn-retry').show();
+                }
+            } catch (e) {
+                row.find('.status-cell').html('<span class="badge badge-danger">Error Red</span>');
+                row.find('.btn-retry').show();
+            }
+        }
+
+        document.getElementById('excelInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+
+                // 1. Agrupamos los folios por ID de Estación en memoria
+                const groupedData = jsonData.reduce((acc, row) => {
+                    const id = row["EstacionID"] || row["IdEstacion"]; // Detecta ambos nombres
+                    const folio = row["Folio"];
+                    const nombre = row["NombreEstacion"] || row["Nombre"];
+
+                    if (!acc[id]) {
+                        acc[id] = { id, nombre, folios: [] };
+                    }
+                    acc[id].folios.push(folio);
+                    return acc;
+                }, {});
+
+                // 2. Limpiamos y preparamos la carga
+                $('#bulkBody').empty();
+                $('#bulkArea').show();
+
+                // 3. Enviamos los IDs al servidor para obtener CR y LS automáticamente
+                const idsParaValidar = Object.keys(groupedData);
+                obtenerMetadataEstaciones(idsParaValidar, groupedData);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Función para obtener CR y LS desde el servidor usando los IDs del Excel
+        async function obtenerMetadataEstaciones(ids, groupedData) {
+            try {
+                const response = await fetch('/Station/GetStationsMetadata', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(ids)
+                });
+
+                const metadata = await response.json();
+                console.log("Datos recibidos:", metadata);
+
+                metadata.forEach(m => {
+                    // USAR idEstacion (con minúscula al inicio) porque así viene el JSON
+                    const estacion = groupedData[m.idEstacion];
+
+                    if (estacion) {
+                        // USAR m.ls y m.cr (en minúsculas)
+                        // Usamos el nombre que viene del Excel (estacion.nombre)
+                        // y los folios agrupados (estacion.folios)
+                        addToBulk(
+                            m.ls,
+                            estacion.nombre,
+                            m.cr,
+                            estacion.folios.join(',')
+                        );
+                    } else {
+                        console.warn(`No se encontró coincidencia para ID: ${m.idEstacion} en los datos del Excel.`);
+                    }
+                });
+
+                if(metadata.length > 0) {
+                    Swal.fire('Carga Lista', `Se agruparon ${metadata.length} estaciones con éxito.`, 'success');
+                } else {
+                    Swal.fire('Atención', 'No se encontró información técnica para los IDs del Excel.', 'warning');
+                }
+
+            } catch (err) {
+                console.error("Error en obtenerMetadataEstaciones:", err);
+                Swal.fire('Error', 'No se pudo obtener la información de las instancias (LS/CR).', 'error');
+            }
+        }
+
+        function descargarReporte() {
+            if (!currentSearchId) {
+                Swal.fire({
+                    title: 'Sin datos',
+                    text: 'Primero debes procesar una búsqueda masiva para poder exportar.',
+                    icon: 'info'
+                });
+                return;
+            }
+
+            // Redirigimos al endpoint del controlador pasando el SearchId actual
+            window.location.href = `/Station/DownloadExcel?searchId=${currentSearchId}`;
+        }
     </script>
 }

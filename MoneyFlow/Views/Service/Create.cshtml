@@ -7,12 +7,12 @@
         <h2 class="text-center">New Service</h2>
         <form asp-controller="Service" asp-action="CreateNewService" method="post">
             <div class="col-sm-6 col-md-8 mb-3">
-                <label for="" class="form-label col-md-6">Nombre</labe>
+                <label for="name" class="form-label col-md-6">Nombre</label>
                     <input type="text" class="form-control col-md-6" asp-for="Name" />
                     <span asp-validation-for="Name" class="text-bg-danger"></span>
             </div>
             <div class="col-sm-6 col-md-8 mb-3">
-                <label for="" class="form-label col-md-6">Tipo</labe>
+                <label for="type" class="form-label col-md-6">Tipo</label>
                     <select class="form-select col-md-6" asp-for="Type">
                     <option value="0" disabled selected>-- select --</option>
                     <option value="income">income</option>

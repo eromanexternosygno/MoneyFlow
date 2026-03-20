@@ -4,7 +4,8 @@ public class User
     public int UserId { get; set; }
     public string FullName { get; set; }
     public string Email { get; set; }
-    public string Password { get; set; }
+    public string? Password { get; set; }= null; // ? simbol represents: That Password can be nullable.
+    public string PasswordHash { get; set; }
 
     // Collections
     public ICollection<Service>Services { get; set; }

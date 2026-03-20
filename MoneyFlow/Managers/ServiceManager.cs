@@ -123,4 +123,19 @@ public class ServiceManager(AppDbContext _dbContext)
         }
     }
 
+    #region Trasnactions
+    public List<ServiceViewModel> GetByType(int userId, string type)
+    {
+        var list = _dbContext.Service
+            .Where(item => item.UserId == userId
+                && item.Type == type)
+            .Select(item => new ServiceViewModel
+            {
+                ServiceId = item.ServiceId,
+                Name = item.Name,
+            }).ToList();
+        return list;
+    }
+    #endregion
+
 }

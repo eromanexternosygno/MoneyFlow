@@ -1,0 +1,158 @@
+﻿@{
+}
+
+<div class="container px-4">
+    <div class="row">
+        <h2 class="text-center">New Transaction</h2>
+
+        <form asp-controller="Transaction" asp-action="SaveNewTransaction" method="post">
+            <div class="col-sm-6 col-md-8 mb-3">
+                <label for="Type" class="form-label col-md-6">Type</label>
+                <select class="form-select col-md-6" id="cboTypeService" onchange="ShowServices()">
+                    <option value="0" disabled selected>-- select --</option>
+                    <option value="income">income</option>
+                    <option value="expense">expense</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-md-8 mb-3">
+                <label for="cboService" class="form-label col-md-6">Service</label>
+                <select class="form-select col-md-6" id="cboService">
+                    <option></option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-md-8 mb-3">
+                <label for="txtComments" class="form-label col-md-6">Comments</label>
+                <input type="text" class="form-control col-md-6" id="txtComments" autocomplete="off" />
+            </div>
+            <div class="col-sm-6 col-md-8 mb-3">
+                <label for="date" class="form-label col-md-6">Date</label>
+                <input type="date" class="form-control col-md-6" id="txtDatei" autocomplete="off" />
+            </div>
+            <div class="col-sm-6 col-md-8 mb-3">
+                <label for="Amount" class="form-label col-md-6">Amount</label>
+                <input type="number" class="form-control col-md-6" id="txtAmount"  autocomplete="off "/>
+            </div>
+
+            <div class="d-grid gap-2 d-md-block">
+                <button type="button" class="btn btn-success" onclick="SaveTransaction()">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+@section Styles {
+    <style>
+        .select2-container--default .select2-selection--single {
+            height: 38px;
+            padding: 6px 12px;
+        }
+    </style>
+}
+@section Scripts {
+    <script>
+        $(document).ready(function(){
+            //console.log('Inicializando...');
+            $('#cboService').select2({
+                placeholder:"--select--",
+                width:'100%'
+            });
+            //Getting actual date and set into input date
+            const today = new Date().toISOString().split('T')[0];
+            $('#txtDatei').val(today);
+        });
+
+        async function ShowServices(){
+            const typeServices = $('#cboTypeService').val();
+            const response = await fetch(`/Transaction/GetServicesByType?type=${typeServices}`,{
+                method:'GET',
+                headers:{
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if(response.ok){
+                const services = await response.json();
+                const serviceSelect = $('#cboService');
+                $('#cboService').empty().append(new Option());
+                services.forEach(service => {
+                    serviceSelect.append(new Option(service.name, service.serviceId));
+                    //$('#cboService').append(`<option value="${service.id}">${service.name}</option>`);
+                });
+
+                serviceSelect.trigger('change.select2');
+            }
+        }
+        
+        //async Save Transactions
+        async function SaveTransaction (){
+            const userId = 1;
+            const ServiceId = $('#cboService').val();
+            const comments = $('#txtComments').val();
+            const Date = $('#txtDatei').val();
+            const TotalAmount = $('#txtAmount').val();
+
+            //Validate
+            if(!ServiceId || !Date || !TotalAmount){
+                Swal.fire({
+                    icon:'warning',
+                    title:'Please fill in all required fields',
+                    text:'Type, Service, Date and Amount are required'
+                });
+                return; // Stop execution if validation fails
+            }
+
+            const transactionData = {
+                UserId:userId,
+                ServiceId:parseInt(ServiceId),
+                Comment:comments,
+                Date:Date,
+                TotalAmount:(TotalAmount) ? parseFloat(TotalAmount) : 0
+            };
+            
+            
+            try {
+                const response = await fetch('/Transaction/SaveNewTransaction',{
+                    method:'POST',
+                    headers:{
+                        'Content-Type': 'application/json'
+                    },
+                    body:JSON.stringify(transactionData)
+                });
+                console.log(response);
+
+                if(response.ok){
+                    //Apply sweetAlet and Execute form function
+                    Swal.fire({icon:'success',title:'¡Transaction Guardada!',timer:1500 });
+                    ClearForm();
+                    // Optionally, reset the form or redirect
+                }else{
+                    //Showing error transaction
+                    const errorData = await response.json();
+                    console.error('Error saving transaction:', errorData);
+                    Swal.fire({
+                        icon:'error',
+                        title:'Error saving transaction',
+                        text:errorData.message || 'An error occurred while saving the transaction'
+                    });
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                Swal.fire({
+                    icon:'error',
+                    title:'Error saving transaction',
+                    text:'An unexpected error occurred. Please try again later.'
+                });
+            }
+        }
+
+        // async clear form after save
+        async function ClearForm(){
+            $('#cboTypeService').val('0').trigger('change');
+            $('#cboService').empty().append(new Option()).trigger('change');
+            $('#txtComments').val('');
+            const today = new Date().toISOString().split('T')[0];
+            $('#txtDatei').val(today);
+            $('#txtAmount').val('');
+        }
+
+    </script>
+}

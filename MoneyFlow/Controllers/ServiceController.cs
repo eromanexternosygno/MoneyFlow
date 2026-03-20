@@ -1,16 +1,22 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using MoneyFlow.Context;
 using MoneyFlow.Managers;
 using MoneyFlow.Models;
+using System.Security.Claims;
 
 namespace MoneyFlow.Controllers
 {
+    [Authorize]
     public class ServiceController(ServiceManager _serviceManager) : Controller
     {
+
+        [HttpGet]
         public IActionResult Index()
         {
             //TODO: Get the userId from the session
-            var listServices = _serviceManager.GetallServices(1); // Temporary userId = 1
+            var userId = HttpContext.User.FindFirst(ClaimTypes.NameIdentifier)!.Value;
+            var listServices = _serviceManager.GetallServices(int.Parse(userId)); // Temporary userId = 1
             return View(listServices);
         }
 
@@ -88,6 +94,7 @@ namespace MoneyFlow.Controllers
         }
         // Delete: Delete Service
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public IActionResult Delete(int id) {
 
             var eliminado = _serviceManager.DelteTask(id);

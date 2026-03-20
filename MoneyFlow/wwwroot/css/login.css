@@ -1,0 +1,85 @@
+﻿body {
+    background-color: #f8f9fd; /* Fondo gris muy claro de la imagen */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+}
+
+.login-card {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    padding: 40px;
+    width: 100%;
+    max-width: 450px;
+    text-align: center;
+}
+
+.icon-circle {
+    background-color: #8e44ad; /* Color púrpura */
+    color: white;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    font-size: 40px;
+}
+
+.login-title {
+    color: #8e44ad;
+    font-weight: 600;
+    margin-bottom: 30px;
+}
+
+.form-control {
+    background-color: #f0f0f0; /* Fondo gris de los inputs */
+    border: none;
+    padding: 12px 20px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+}
+
+    .form-control::placeholder {
+        color: #ccc;
+    }
+
+.options-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    color: #8e44ad;
+    margin-bottom: 30px;
+}
+
+.btn-get-started {
+    background-color: #8e44ad;
+    color: white;
+    border: none;
+    width: 100%;
+    padding: 12px;
+    border-radius: 5px;
+    font-weight: 500;
+    transition: 0.3s;
+    position: relative;
+    top: 20px; /* Para que sobresalga un poco como en la imagen */
+}
+
+    .btn-get-started:hover {
+        background-color: #732d91;
+        color: white;
+    }
+
+.form-check-input:checked {
+    background-color: #8e44ad;
+    border-color: #8e44ad;
+}
+
+a {
+    color: #8e44ad;
+    text-decoration: none;
+}

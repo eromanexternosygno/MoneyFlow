@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using MoneyFlow.Entities;
 
 namespace MoneyFlow.Context;
@@ -21,6 +22,7 @@ public class AppDbContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         // Define User Entity From: https://learn.microsoft.com/en-us/ef/core/modeling/entity-types
+        var passwordHasher = new PasswordHasher<User>();
         modelBuilder.Entity<User>(e =>
         {
             e.HasKey("UserId");
@@ -29,7 +31,7 @@ public class AppDbContext : DbContext
             // Insert Data Seeding From: https://learn.microsoft.com/en-us/ef/core/modeling/data-seeding
             // Seed a default user
             e.HasData(
-                new User { UserId = 1 , FullName = "Nestor Silva", Email = "nestor@gmail.com", Password = "password123" }
+                new User { UserId = 1 , FullName = "Nestor Silva", Email = "nestor@gmail.com", PasswordHash = passwordHasher.HashPassword(null, "password123") }
                 );
         });
 
