@@ -1,6 +1,4 @@
-﻿@model IEnumerable<StationViewModel>
-@{
-}
+﻿
 
 <h3>Buscar Estación</h3>
 <form method="post" class="mb-4">
@@ -63,6 +61,9 @@
                             onclick="addToBulk('@station.LS', '@station.Nombre', '@station.CR')">
                         <i class="bi bi-plus-circle"></i> Agregar a Masivo
                     </button>
+                    <a asp-action="GetAudits" asp-controller="Audit" asp-route-ls="@station.LS" class="btn btn-warning btn-sm">
+                        <i class="bi bi-clipboard-data"></i> Auditorías
+                    </a>
                 </td>
             </tr>
         }

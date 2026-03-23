@@ -22,7 +22,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.AccessDeniedPath = "/Account/AccessDenied";
 
         options.Cookie.HttpOnly = true; // Activate
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; // This is for
+        options.Cookie.SecurePolicy = CookieSecurePolicy.None;//CookieSecurePolicy.SameAsRequest; // This is for
         options.Cookie.SameSite = SameSiteMode.Lax;
 
         options.ExpireTimeSpan = TimeSpan.FromMinutes(60);
@@ -56,10 +56,15 @@ builder.Services.AddScoped<ITransactionManager,TransactionManager>();
 // Add User Manager to the Service Container
 builder.Services.AddScoped<IUserManager, UserManager>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddScoped<IAuditManager, AuditManager>();
 
 // Register UserMigrationService for execute migrations at startup, just for execute one time, then you can remove this service and the code in Program.cs
 //builder.Services.AddScoped<UserMigrationService>();
 builder.Services.AddScoped<PasswordService>(); // PasswordService for hashing and verifying passwords, you can use it in UserManager for secure password handling
+
+
+//Configure Rotativa.AspNetCore PDF
+Rotativa.AspNetCore.RotativaConfiguration.Setup(builder.Environment.WebRootPath, "Rotativa");
 
 var app = builder.Build();
 
@@ -69,8 +74,6 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Home/Error");
 }
 app.UseRouting();
-
-app.UseAuthorization();
 
 app.MapStaticAssets();
 

@@ -21,6 +21,9 @@ namespace MoneyFlow.Controllers
         public IActionResult Index()
         {
             return View();
+            //var isAuth = User.Identity.IsAuthenticated;
+            //return Content($"Autenticado: {isAuth}");
+
         }
 
         public IActionResult Privacy()

@@ -1,0 +1,142 @@
+﻿@model AuditDetailViewModel
+@{
+    var labelsJson = System.Text.Json.JsonSerializer.Serialize(
+        Model.Inventory.Select(x => x.ProductName)
+    );
+
+    var dataJson = System.Text.Json.JsonSerializer.Serialize(
+        Model.Inventory.Select(x => x.InventoryDifference)
+    );
+}
+<div class="row">
+    <div class="col-sm-6">
+        <h3>Auditoría @Model.AuditId - @Model.Station</h3>
+        <h4>Inventairo</h4>
+    </div>
+    <div class="col-sm-12">
+        <div>
+            <a asp-controller="Station" asp-action="Index" class="btn btn-secondary">
+                ← Regresar a estaciones
+            </a>
+        </div>
+       <div>
+            <a asp-action="ExportPdf"
+               asp-route-auditId="@Model.AuditId"
+               asp-route-station="@Model.Station"
+               class="btn btn-danger">
+                <i class="bi bi-file-earmark-pdf"></i> Exportar PDF
+            </a>
+       </div>
+    </div>
+</div>
+<div class="row">
+    @if (TempData["Message"] != null)
+    {
+            <div class="alert alert-@TempData["MessageType"] role="alert">
+                @TempData["Message"]
+            </div>
+    }
+    <div class="col-sm-12">
+        <table id="inventoryTable" class="table table-bordered table-striped">
+            <thead>
+                <tr>
+                    <th>Producto</th>
+                    <th>Teórico</th>
+                    <th>Físico</th>
+                    <th>Diferencia</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model.Inventory)
+                {
+                    var diff = item.InventoryDifference;
+                    var statusClass = diff == 0 ? "table-success"
+                                      : diff > 0 ? "table-warning"
+                                      : "table-danger";
+                    <tr class="@statusClass">
+                        <td class="text-start">@item.ProductName</td>
+                        <td>@item.TheoreticalInventory</td>
+                        <td>@item.ActualInventory</td>
+                        <td class="fw-bold">
+                            @diff
+                        </td>
+                        <td>
+                            @if (diff == 0)
+                            {
+                                <span class="badge bg-success">Correcto</span>
+                            }
+                            else if (diff > 0)
+                            {
+                                <span class="badge bg-warning text-dark">Sobrante</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger">Faltante</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+    </div>
+    <div class="col-sm-12">
+        <h4>Movimientos</h4>
+
+        <table id="detailTable" class="table table-bordered table-striped">
+            <thead>
+                <tr>
+                    <th>ProductoAuditId</th>
+                    <th>Ubicación</th>
+                    <th>Teórico</th>
+                    <th>Real</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var d in Model.Details)
+                {
+                    <tr>
+                        <td>@d.ProductAuditInventoryId</td>
+                        <td>@d.LocationName</td>
+                        <td>@d.TheoreticalInventory</td>
+                        <td>@d.ActualInventory</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="col-sm-12 mt-4">
+        <canvas id="inventoryChart"></canvas>
+    </div>
+</div>
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        $(document).ready(function () {
+
+            $('#inventoryTable').DataTable({
+                "pageLength": 10
+            });
+
+            $('#detailTable').DataTable({
+                "pageLength": 10
+            });
+
+        });
+    </script>
+    <script>
+            const data = {
+            labels: @Html.Raw(labelsJson),
+            datasets: [{
+                label: 'Diferencia',
+                data: @Html.Raw(dataJson)
+            }]
+        };
+
+        new Chart(document.getElementById('inventoryChart'), {
+            type: 'bar',
+            data: data
+        });
+    </script>
+}

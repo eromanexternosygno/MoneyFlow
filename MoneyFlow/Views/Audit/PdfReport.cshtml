@@ -1,0 +1,157 @@
+﻿@model AuditDetailViewModel
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <style>
+        body {
+            font-family: Arial;
+            font-size: 10px;
+        }
+
+        h2, h3 {
+            margin: 5px 0;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th, td {
+            border: 1px solid #000;
+            padding: 4px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #d9d9d9;
+            font-weight: bold;
+        }
+
+        .text-left {
+            text-align: left;
+        }
+
+        .ok {
+            background-color: #c6efce;
+        }
+
+        .warning {
+            background-color: #ffeb9c;
+        }
+
+        .danger {
+            background-color: #ffc7ce;
+        }
+
+        .header {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>REPORTE DE AUDITORÍA</h2>
+        <p><b>Auditoría:</b> @Model.AuditId</p>
+        <p><b>Estación:</b> @Model.Station</p>
+        <p><b>Fecha:</b> @DateTime.Now.ToString("dd/MM/yyyy HH:mm")</p>
+    </div>
+
+    <!-- ===================== INVENTARIO ===================== -->
+    <h3>Inventario</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th rowspan="2">Cod</th>
+                <th rowspan="2">Producto</th>
+
+                <th colspan="2">Rack 1</th>
+                <th colspan="2">Rack 2</th>
+                <th colspan="2">Rack 3</th>
+                <th colspan="2">Rack 4</th>
+                <th colspan="2">General</th>
+
+                <th rowspan="2">Inventario Teórico</th>
+                <th rowspan="2">Total Físico</th>
+                <th rowspan="2">Diferencia</th>
+            </tr>
+            <tr>
+                <th>T</th>
+                <th>R</th>
+                <th>T</th>
+                <th>R</th>
+                <th>T</th>
+                <th>R</th>
+                <th>T</th>
+                <th>R</th>
+                <th>T</th>
+                <th>R</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.Inventory)
+            {
+                var diff = item.InventoryDifference;
+                var rowClass = diff == 0 ? "ok"
+                : diff > 0 ? "warning"
+                : "danger";
+
+                <tr class="@rowClass">
+                    <td>@item.ProductId</td>
+                    <td class="text-left">@item.ProductName</td>
+
+                    <!-- Aquí puedes mapear racks reales si los tienes -->
+                    <td>0</td>
+                    <td>0</td>
+                    <td>0</td>
+                    <td>0</td>
+                    <td>0</td>
+                    <td>0</td>
+                    <td>0</td>
+                    <td>0</td>
+
+                    <!-- GENERAL -->
+                    <td>@item.TheoreticalInventory</td>
+                    <td>@item.ActualInventory</td>
+
+                    <td>@item.TheoreticalInventory</td>
+                    <td>@item.ActualInventory</td>
+                    <td><b>@diff</b></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <br />
+
+    <!-- ===================== DETALLE ===================== -->
+    <h3>Detalle de Movimientos</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ProductoAuditId</th>
+                <th>Ubicación</th>
+                <th>Teórico</th>
+                <th>Real</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var d in Model.Details)
+            {
+                <tr>
+                    <td>@d.ProductAuditInventoryId</td>
+                    <td class="text-left">@d.LocationName</td>
+                    <td>@d.TheoreticalInventory</td>
+                    <td>@d.ActualInventory</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+</body>
+</html>

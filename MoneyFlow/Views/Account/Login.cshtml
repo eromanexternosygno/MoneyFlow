@@ -24,7 +24,7 @@
         </div>
 
         <form asp-controller="Account" asp-action="Login" method="post">
-            <input type="email" class="form-control" placeholder="Email" required name="Email" asp-for="Email">
+            <input type="email" class="form-control" placeholder="Email" required name="Email" asp-for="Email" autocomplete="off">
             <span asp-validation-for="Email" class="text-danger"></span>
             <input type="password" class="form-control" placeholder="Password" required name="Password" asp-for="Password">
             <span asp-validation-for="Password" class="text-danger"></span>

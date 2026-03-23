@@ -1,0 +1,78 @@
+﻿@using MoneyFlow.DTOs
+@model List<AuditDTO>
+
+<div class="row">
+    
+    <div class="col-sm-6">
+        <h3>Auditorias - @ViewBag.Station</h3>
+    </div>
+    <div class="col-sm-4">
+        <a asp-controller="Station" asp-action="Index" class="btn btn-secondary">
+            ← Regresar a estaciones
+        </a>
+    </div>
+</div>
+<div class="row">
+    <!--Alert-->
+    @if (TempData["Message"] != null)
+    {
+        <div class="alert alert-@TempData["MessageType"] role="alert">
+            @TempData["Message"]
+        </div>
+    }
+    <div class="col-sm-12">
+        <table id="auditTable" class="table table-bordered table-striped">
+            <thead>
+                <tr>
+                    <th>AuditId</th>
+                    <th>Folio</th>
+                    <th>Status</th>
+                    <th>Inicio</th>
+                    <th>Fin</th>
+                    <th>Comments</th>
+                    <th>MotiveAuditAdjustmentName</th>
+                    <th>AuditType</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var audit in Model)
+                {
+                    <tr>
+                        <td>@audit.AuditId</td>
+                        <td>@audit.Folio</td>
+                        <td>@audit.StatusName</td>
+                        <td>@audit.StartDate</td>
+                        <td>@audit.EndDate</td>
+                        <td>@audit.Comments</td>
+                        <td>@audit.MotiveAuditAdjustmentName</td>
+                        <td>@audit.AuditType</td>
+                        <td>
+                            <a asp-action="AuditDetail"
+                               asp-route-ls="@ViewBag.Station"
+                               asp-route-auditId="@audit.AuditId"
+                               class="btn btn-info btn-sm">
+                                Ver Detalle
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#auditTable').DataTable({
+                "pageLength": 10,
+                "order": [[0, "desc"]],
+                "language": {
+                    "search": "Buscar:",
+                    "lengthMenu": "Mostrar _MENU_ registros",
+                    "info": "Mostrando _START_ a _END_ de _TOTAL_ auditorías"
+                }
+            });
+        });
+    </script>
+}
