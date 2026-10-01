@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using MoneyFlow.Entities;
 
 namespace MoneyFlow.Context;
@@ -14,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<User> User { get; set; }
     public DbSet<Service> Service { get; set; }
     public DbSet<Transaction> Transaction { get; set; }
+    public DbSet<TransaccionProcesada> TransaccionesProcesadas { get; set; }
 
     // Define relationships using Fluent API: https://learn.microsoft.com/en-us/ef/core/modeling/relationships
     // Note: This is optional if you follow EF Core conventions
@@ -22,16 +22,17 @@ public class AppDbContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         // Define User Entity From: https://learn.microsoft.com/en-us/ef/core/modeling/entity-types
-        var passwordHasher = new PasswordHasher<User>();
         modelBuilder.Entity<User>(e =>
         {
             e.HasKey("UserId");
             e.Property("UserId").ValueGeneratedOnAdd();
 
             // Insert Data Seeding From: https://learn.microsoft.com/en-us/ef/core/modeling/data-seeding
-            // Seed a default user
+            // Seed a default user.
+            // Note: PasswordHash is a static, hardcoded value so the model is deterministic
+            // (PasswordHasher generates a different hash each time, which breaks migrations).
             e.HasData(
-                new User { UserId = 1 , FullName = "Nestor Silva", Email = "nestor@gmail.com", PasswordHash = passwordHasher.HashPassword(null, "password123") }
+                new User { UserId = 1, FullName = "Nestor Silva", Email = "nestor@gmail.com", Password = "password123", PasswordHash = "AQAAAAEAACcQAAAAEI3E/O7ptZvXiEJtpztwUuGTUxOmSnN63pcdBOKI1/rP55eKbRF7yzV93fRH8I4GHw==" }
                 );
         });
 
@@ -61,6 +62,14 @@ public class AppDbContext : DbContext
             e.HasOne(e =>e.User).WithMany(u => u.Transactions)
             .HasForeignKey(e => e.UserId)
             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Define TransaccionProcesada Entity
+        modelBuilder.Entity<TransaccionProcesada>(e => {
+            e.ToTable("TransaccionesProcesadas");
+            e.HasKey("Id");
+            e.Property("Id").ValueGeneratedOnAdd();
+            e.Property("FechaCarga").HasColumnType("datetime").HasDefaultValueSql("GETDATE()");
         });
     }
 }

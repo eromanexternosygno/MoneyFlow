@@ -22,9 +22,15 @@ namespace MoneyFlow.Interfaces
 
         // New Function Folios
         Task<Guid> ExecuteBulkSearch(List<StationFolioDTO> request, string user);
-        Task<byte[]> ExportResultsToExcel(Guid searchId);
+        Task<byte[]> ExportResultsToExcel();
         // NUEVO: Método para consultar el avance de la búsqueda
         object GetProgress(Guid searchId);
+
+        // Total de resultados almacenados en LocalBulkSearchResults.
+        int ObtenerConteoResultados();
+
+        // Elimina (trunca) los resultados y errores de la búsqueda masiva.
+        void TruncarResultados();
 
         // Método para obtener los datos metadata de las estaciones ne local de mi tabla StationMetadata, filtrando por el nombre de la estación o cualquier otro criterio relevante
         //Task<IEnumerable<StationViewModel>> GetStationMetadata(string search);

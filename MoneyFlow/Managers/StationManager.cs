@@ -307,6 +307,7 @@ public class StationManager : IStationManager
                 var foliosList = item.FoliosCsv.Split(',')
                    .Select(f => f.Trim())
                    .Where(f => !string.IsNullOrEmpty(f))
+                   .Distinct()
                    .ToList();
 
                 if (!foliosList.Any()) return;
@@ -321,7 +322,10 @@ public class StationManager : IStationManager
                     O.OrderId, 
                     O.[Type] AS Tipo, 
                     O.Total,
-                    ISNULL(CONCAT(U.[Name], ' ' + U.LastName), 'Sin Nombre') AS NombreEmpleado,
+                    CASE
+                        WHEN NULLIF(LTRIM(RTRIM(CONCAT(U.[Name], ' ', U.LastName))), '') IS NULL THEN 'Sin Nombre'
+                        ELSE LTRIM(RTRIM(CONCAT(U.[Name], ' ', U.LastName)))
+                    END AS NombreEmpleado,
                     CASE WHEN U.Disabled = 1 THEN 'Deshabilitado' ELSE 'Habilitado' END AS EstadoEmpleado,
                     O.EmployeeNumber AS EmpleadoEstacion,
                     ISNULL(R.Name, 'Sin Rol') AS RoleName,
@@ -333,17 +337,30 @@ public class StationManager : IStationManager
                 LEFT JOIN [{item.LS}].[GAXPOS].Security.Roles R ON R.Id = U.RoleId
                 WHERE O.Folio IN @Folios";
 
-                IEnumerable<dynamic> remoteResults;
-                using (var connStations = StationsConnection)
+                // SQL Server limita a 2100 parámetros por comando. Particionamos los
+                // folios en lotes y ejecutamos la consulta por partes para evitar
+                // el error "The incoming request has too many parameters".
+                const int batchSize = 1000;
+                var resultados = new List<dynamic>();
+
+                foreach (var lote in foliosList.Chunk(batchSize))
                 {
-                    remoteResults = await connStations.QueryAsync(remoteQuery, new
+                    using (var connStations = StationsConnection)
                     {
-                        Folios = foliosList,
-                        NombreEstacion = item.Nombre
-                    }, commandTimeout: 60);
+                        var resultadosLote = await connStations.QueryAsync(remoteQuery, new
+                        {
+                            Folios = lote,
+                            NombreEstacion = item.Nombre
+                        }, commandTimeout: 60);
+
+                        if (resultadosLote != null)
+                        {
+                            resultados.AddRange(resultadosLote);
+                        }
+                    }
                 }
 
-                if (remoteResults != null && remoteResults.Any())
+                if (resultados.Any())
                 {
                     using var connLocal = LocalConnection;
                     string insertQuery = @"
@@ -352,7 +369,7 @@ public class StationManager : IStationManager
                     VALUES (@Folio, @OrderId, @Tipo, @Total, @NombreEmpleado, @EstadoEmpleado, 
                             @EmpleadoEstacion, @RoleName, @CR, @Estacion, @Created, @SearchId, @UserExecution)";
 
-                    await connLocal.ExecuteAsync(insertQuery, remoteResults.Select(r => new {
+                    await connLocal.ExecuteAsync(insertQuery, resultados.Select(r => new {
                         r.Folio,
                         r.OrderId,
                         r.Tipo,
@@ -413,19 +430,18 @@ public class StationManager : IStationManager
         return searchId;
     }
 
-    public async Task<byte[]> ExportResultsToExcel(Guid searchId)
+    public async Task<byte[]> ExportResultsToExcel()
     {
         using var connLocal = LocalConnection;
 
-        // Consultamos la tabla local
+        // Consultamos la tabla local (toda la información procesada acumulada)
         string query = @"
         SELECT Folio, OrderId, Tipo, Total, NombreEmpleado, EstadoEmpleado, 
                EmpleadoEstacion, RoleName, CR, Estacion, Created
         FROM LocalBulkSearchResults 
-        WHERE SearchId = @searchId
         ORDER BY Estacion, Created DESC";
 
-        var results = await connLocal.QueryAsync<BulkSearchResultDTO>(query, new { searchId });
+        var results = await connLocal.QueryAsync<BulkSearchResultDTO>(query);
 
         if (!results.Any()) throw new Exception("No hay datos para exportar.");
 
@@ -447,6 +463,19 @@ public class StationManager : IStationManager
                 return stream.ToArray();
             }
         }
+    }
+
+    public int ObtenerConteoResultados()
+    {
+        using var conn = LocalConnection;
+        return conn.ExecuteScalar<int>("SELECT COUNT(*) FROM LocalBulkSearchResults");
+    }
+
+    public void TruncarResultados()
+    {
+        using var conn = LocalConnection;
+        conn.Execute("TRUNCATE TABLE LocalBulkSearchResults");
+        conn.Execute("TRUNCATE TABLE BulkSearchErrors");
     }
 
     // Método para consultar los datos de la estación en local (IdEstacion, CR, LS, Nombre) dado un Id de estación específico.

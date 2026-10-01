@@ -1,0 +1,313 @@
+@{
+    ViewData["Title"] = "Transacciones Procesadas";
+}
+
+<div class="row">
+    <div class="col-sm-6">
+        <h2><i class="bi bi-file-earmark-spreadsheet"></i> Carga de Transacciones Procesadas</h2>
+    </div>
+    <div class="col-sm-6 text-end">
+        <button type="button" id="btnDescargar" class="btn btn-outline-secondary me-1" onclick="descargarCsv()" disabled>
+            <i class="bi bi-download"></i> Descargar CSV
+        </button>
+        <button type="button" id="btnEliminar" class="btn btn-outline-danger" onclick="eliminarDatos()" disabled>
+            <i class="bi bi-trash"></i> Eliminar registros
+        </button>
+    </div>
+</div>
+<hr />
+
+<div class="card bg-light mb-4">
+    <div class="card-body">
+        <h5 class="mb-3">1. Selecciona el archivo Excel</h5>
+        <p class="small text-muted">
+            El archivo debe contener las columnas:
+            <b>EstacionId_1</b>, <b>CR_1</b>, <b>Estacion_1</b>, <b>Folio_1</b> y <b>Folio_2</b>.
+        </p>
+        <div class="row g-2 align-items-center">
+            <div class="col-md-8">
+                <input type="file" id="excelInput" class="form-control" accept=".xlsx" />
+            </div>
+            <div class="col-md-4">
+                <button type="button" id="btnCargar" class="btn btn-primary w-100" onclick="cargarExcel()">
+                    <i class="bi bi-eye"></i> Cargar y previsualizar
+                </button>
+            </div>
+        </div>
+        <div id="erroresArea" class="mt-3" style="display:none;"></div>
+    </div>
+</div>
+
+<div class="card mb-4" id="previewCard" style="display:none;">
+    <div class="card-body">
+        <h5 class="mb-3">
+            2. Vista previa agrupada
+            (<span id="totalEstaciones">0</span> estaciones, <span id="totalFoliosPreview">0</span> folios)
+        </h5>
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped table-sm" id="previewTable">
+                <thead>
+                    <tr>
+                        <th>IdEstacion</th>
+                        <th>CR</th>
+                        <th>LS</th>
+                        <th>Nombre</th>
+                        <th>Folios</th>
+                        <th>Muestra de folios</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="text-end">
+            <button type="button" id="btnGuardar" class="btn btn-success" onclick="guardar()" disabled>
+                <i class="bi bi-check-lg"></i> Confirmar e insertar
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="loader" class="overlay" style="display:none;">
+    <div class="container text-center">
+        <div class="spinner-border text-light" role="status"></div>
+        <h5 class="text-white mt-3">Procesando en segundo plano...</h5>
+        <div class="progress mt-3" style="height: 30px;">
+            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                 role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+        </div>
+        <p id="progressStatus" class="text-white mt-2"></p>
+    </div>
+</div>
+
+<style>
+    .overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.7);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+
+@section Scripts {
+    <script>
+        let filasPreview = [];
+        let hayDatos = false;
+
+        $(document).ready(function () {
+            obtenerConteo();
+        });
+
+        function setBotonesAcciones() {
+            document.getElementById('btnDescargar').disabled = !hayDatos;
+            document.getElementById('btnEliminar').disabled = !hayDatos;
+        }
+
+        async function obtenerConteo() {
+            try {
+                const res = await fetch('/TransaccionesProcesadas/ObtenerConteo');
+                const data = await res.json();
+                hayDatos = data.total > 0;
+                setBotonesAcciones();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function cargarExcel() {
+            const input = document.getElementById('excelInput');
+            const erroresArea = document.getElementById('erroresArea');
+
+            if (!input.files || input.files.length === 0) {
+                Swal.fire('Atención', 'Selecciona un archivo Excel.', 'warning');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('archivo', input.files[0]);
+
+            $('#loader').show();
+            erroresArea.style.display = 'none';
+            erroresArea.innerHTML = '';
+
+            try {
+                const response = await fetch('/TransaccionesProcesadas/CargarExcel', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (!result.success) {
+                    mostrarErrores(result.errores);
+                    ocultarPreview();
+                    return;
+                }
+
+                filasPreview = result.filas || [];
+                renderizarPreview(result.resumen || []);
+                document.getElementById('btnGuardar').disabled = filasPreview.length === 0;
+                Swal.fire('Carga lista', `Se previsualizaron ${result.resumen.length} estaciones.`, 'success');
+            } catch (err) {
+                console.error(err);
+                Swal.fire('Error', 'No se pudo procesar el archivo.', 'error');
+            } finally {
+                $('#loader').hide();
+            }
+        }
+
+        function renderizarPreview(resumen) {
+            const tbody = document.querySelector('#previewTable tbody');
+            tbody.innerHTML = '';
+            let totalFolios = 0;
+            resumen.forEach(r => {
+                totalFolios += r.totalFolios;
+                tbody.insertAdjacentHTML('beforeend', `
+                    <tr>
+                        <td>${escapeHtml(r.idEstacion)}</td>
+                        <td>${escapeHtml(r.cr)}</td>
+                        <td>${escapeHtml(r.ls)}</td>
+                        <td>${escapeHtml(r.nombre)}</td>
+                        <td>${escapeHtml(r.totalFolios)}</td>
+                        <td>${escapeHtml(r.foliosMuestra)}</td>
+                    </tr>
+                `);
+            });
+            document.getElementById('totalEstaciones').textContent = resumen.length;
+            document.getElementById('totalFoliosPreview').textContent = totalFolios;
+            document.getElementById('previewCard').style.display = '';
+        }
+
+        function ocultarPreview() {
+            filasPreview = [];
+            document.getElementById('previewCard').style.display = 'none';
+            document.getElementById('btnGuardar').disabled = true;
+        }
+
+        function mostrarErrores(errores) {
+            const area = document.getElementById('erroresArea');
+            area.style.display = '';
+            area.innerHTML = `
+                <div class="alert alert-danger">
+                    <ul class="mb-0">
+                        ${(errores || []).map(e => `<li>${escapeHtml(e)}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+
+        async function guardar() {
+            if (filasPreview.length === 0) {
+                Swal.fire('Atención', 'No hay datos para guardar.', 'warning');
+                return;
+            }
+
+            resetProgress();
+            $('#loader').show();
+
+            try {
+                const response = await fetch('/TransaccionesProcesadas/Guardar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(filasPreview)
+                });
+                const result = await response.json();
+
+                if (!response.ok || !result.success || !result.jobId) {
+                    $('#loader').hide();
+                    Swal.fire('Error', result.message || 'No se pudo encolar la carga.', 'error');
+                    return;
+                }
+
+                // Consultamos el progreso del job en segundo plano
+                const interval = setInterval(async () => {
+                    try {
+                        const res = await fetch(`/TransaccionesProcesadas/GetProgreso?jobId=${result.jobId}`);
+                        const progress = await res.json();
+                        updateProgressBar(progress.percentage, progress.current, progress.total, progress.estado);
+
+                        if (progress.estado === 'Completado') {
+                            clearInterval(interval);
+                            $('#loader').hide();
+                            ocultarPreview();
+                            document.getElementById('excelInput').value = '';
+                            hayDatos = true;
+                            setBotonesAcciones();
+                            Swal.fire('Guardado', `Se insertaron ${progress.current} registros correctamente.`, 'success');
+                        } else if (progress.estado === 'Error') {
+                            clearInterval(interval);
+                            $('#loader').hide();
+                            Swal.fire('Error', progress.mensaje || 'Ocurrió un error al procesar la carga.', 'error');
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }, 1500);
+            } catch (err) {
+                console.error(err);
+                $('#loader').hide();
+                Swal.fire('Error', 'No se pudo encolar la carga.', 'error');
+            }
+        }
+
+        async function eliminarDatos() {
+            const confirmacion = await Swal.fire({
+                title: '¿Eliminar registros?',
+                text: 'Se eliminarán todos los registros de TransaccionesProcesadas.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            });
+
+            if (!confirmacion.isConfirmed) return;
+
+            $('#loader').show();
+            try {
+                const res = await fetch('/TransaccionesProcesadas/Eliminar', { method: 'POST' });
+                const result = await res.json();
+
+                if (res.ok && result.success) {
+                    hayDatos = false;
+                    setBotonesAcciones();
+                    Swal.fire('Eliminado', result.message, 'success');
+                } else {
+                    Swal.fire('Error', result.message || 'No se pudo eliminar la información.', 'error');
+                }
+            } catch (e) {
+                console.error(e);
+                Swal.fire('Error', 'No se pudo eliminar la información.', 'error');
+            } finally {
+                $('#loader').hide();
+            }
+        }
+
+        function descargarCsv() {
+            if (!hayDatos) return;
+            window.location.href = '/TransaccionesProcesadas/DescargarCsv';
+        }
+
+        function resetProgress() {
+            $('#progressBar').css('width', '0%').text('0%');
+            $('#progressStatus').text('');
+        }
+
+        function updateProgressBar(percentage, current, total, estado) {
+            $('#progressBar').css('width', percentage + '%').text(percentage + '%');
+            $('#progressStatus').text(`${estado}: ${current} de ${total} registros`);
+        }
+
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+    </script>
+}

@@ -1,3 +1,5 @@
+using Hangfire;
+using Hangfire.Dashboard;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -57,6 +59,19 @@ builder.Services.AddScoped<ITransactionManager,TransactionManager>();
 builder.Services.AddScoped<IUserManager, UserManager>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<IAuditManager, AuditManager>();
+builder.Services.AddScoped<ITransaccionesProcesadasManager, TransaccionesProcesadasManager>();
+
+// Configure Hangfire for background processing (file loads, bulk inserts, etc.)
+var hangfireConnectionString = builder.Configuration.GetConnectionString("LocalDb");
+builder.Services.AddHangfire(config =>
+{
+    config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180);
+    config.UseSimpleAssemblyNameTypeSerializer();
+    config.UseRecommendedSerializerSettings();
+    config.UseSqlServerStorage(hangfireConnectionString);
+});
+builder.Services.AddHangfireServer();
+builder.Services.AddSingleton<TransaccionesProcesadasJob>();
 
 // Register UserMigrationService for execute migrations at startup, just for execute one time, then you can remove this service and the code in Program.cs
 //builder.Services.AddScoped<UserMigrationService>();
@@ -80,6 +95,12 @@ app.MapStaticAssets();
 //Activate Middleware for authentication
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Hangfire dashboard (only authenticated users)
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireAuthorizationFilter() }
+});
 
 app.MapControllerRoute(
     name: "default",

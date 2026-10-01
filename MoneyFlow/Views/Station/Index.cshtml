@@ -13,14 +13,17 @@
     <div class="form-control mb-4">
         <div class="card bg-light mb-3">
             <div class="card-body">
-                <h5><i class="bi bi-file-earmark-spreadsheet"></i> Carga Masiva desde Excel</h5>
-                <p class="small text-muted">El archivo debe tener las columnas: <b>IdEstacion, CR, LS, Nombre, FoliosTotales</b></p>
-                <input type="file" id="excelInput" class="form-control" accept=".xlsx, .xls" />
+                <h5><i class="bi bi-file-earmark-spreadsheet"></i> Carga Masiva desde Excel o CSV</h5>
+                <p class="small text-muted">Acepta Excel (<b>EstacionId_1, Estacion_1, Folio_1, Folio_2</b>) o el CSV exportado (<b>IdEstacion, Nombre, FoliosTotales</b>).</p>
+                <input type="file" id="excelInput" class="form-control" accept=".xlsx, .xls, .csv" />
             </div>
         </div>
-        <div class="mt-4">
-            <button type="button" id="btnExportarExcel" class="btn btn-success btn-md" onclick="descargarReporte()">
+        <div class="mt-4 d-flex gap-2">
+            <button type="button" id="btnExportarExcel" class="btn btn-success btn-md" onclick="descargarReporte()" disabled>
                 <i class="bi bi-file-earmark-excel"></i> EXPORTAR RESULTADOS A EXCEL
+            </button>
+            <button type="button" id="btnEliminarResultados" class="btn btn-outline-danger btn-md" onclick="eliminarResultados()" disabled>
+                <i class="bi bi-trash"></i> ELIMINAR RESULTADOS
             </button>
         </div>
     </div>
@@ -75,17 +78,24 @@
     <table class="table table-dark table-hover" id="selectedTable">
         <thead>
             <tr>
+                <th style="width:30px"><input type="checkbox" id="chkSeleccionarTodos" /></th>
                 <th>Estación</th>
                 <th>CR</th>
                 <th width="50%">Folios (Separados por coma)</th>
+                <th>Estado</th>
                 <th>Acción</th>
             </tr>
         </thead>
         <tbody id="bulkBody"></tbody>
     </table>
-    <button class="btn btn-xl btn-block btn-info" onclick="startProcessing()">
-        <i class="bi bi-play-fill"></i> PROCESAR Y DESCARGAR EXCEL
-    </button>
+    <div class="d-flex gap-2 mt-3">
+        <button class="btn btn-info" onclick="startProcessing()">
+            <i class="bi bi-play-fill"></i> PROCESAR TODAS
+        </button>
+        <button class="btn btn-warning" onclick="retrySeleccionados()">
+            <i class="bi bi-arrow-repeat"></i> REINTENTAR SELECCIONADAS
+        </button>
+    </div>
 </div>
 
 @* <div id="loader" class="overlay" style="display:none;">
@@ -137,18 +147,25 @@
                     }
                 }
             });
+
+            // Seleccionar / deseleccionar todas las filas del área masiva
+            $('#chkSeleccionarTodos').change(function () {
+                $('.select-row').prop('checked', this.checked);
+            });
+
+            // Estado inicial de los botones exportar/eliminar
+            verificarResultados();
         });
 
         /*New Functions*/
         // 1. Agregar a la tabla de abajo
-        let currentSearchId = null;
+        let hayResultados = false;
 
         function addToBulk(ls, nombre, cr, folios = "") {
-            //if ($(`#row-${ls}`).length > 0) return;
-
             $('#bulkArea').show();
             $('#bulkBody').append(`
                 <tr id="row-${ls}" class="station-row">
+                    <td class="text-center"><input type="checkbox" class="select-row" data-ls="${ls}" /></td>
                     <td><b>${nombre}</b></td>
                     <td>${cr}</td>
                     <td>
@@ -171,21 +188,26 @@
             `);
         }
 
-        // 2. Enviar todo al Manager con Spinner
-        async function startProcessing() {
+        // Obtiene los datos (LS, Nombre, CR, FoliosCsv) de un conjunto de filas.
+        function obtenerDatosDeFilas($rows) {
             const data = [];
-            $('.folio-data').each(function() {
-                const val = $(this).val().trim();
+            $rows.each(function() {
+                const textarea = $(this).find('.folio-data');
+                const val = textarea.val().trim();
                 if (val !== "") {
                     data.push({
-                        LS: String($(this).attr('data-ls')),
-                        Nombre: String($(this).attr('data-nombre')),
-                        CR: String($(this).attr('data-cr')),
+                        LS: String(textarea.attr('data-ls')),
+                        Nombre: String(textarea.attr('data-nombre')),
+                        CR: String(textarea.attr('data-cr')),
                         FoliosCsv: val
                     });
                 }
             });
+            return data;
+        }
 
+        // Envía una lista de estaciones al backend y monitorea el progreso.
+        async function procesarEstaciones(data) {
             if (data.length === 0) {
                 Swal.fire('Atención', 'Ingresa folios en al menos una estación', 'warning');
                 return;
@@ -193,9 +215,9 @@
 
             $('#loader').show();
             $('#progressBar').css('width', '0%').text('0%');
+            $('#progressStatus').text('Iniciando búsqueda...');
 
             try {
-                // AJUSTA LA RUTA SI TU CONTROLADOR ES 'Stations'
                 const response = await fetch('/Station/ProcessBulk', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -203,11 +225,11 @@
                 });
 
                 const result = await response.json();
-                currentSearchId = result.searchId;
+                const searchId = result.searchId;
 
                 const interval = setInterval(async () => {
                     try {
-                        const res = await fetch(`/Station/GetProgress?searchId=${currentSearchId}`);
+                        const res = await fetch(`/Station/GetProgress?searchId=${searchId}`);
                         const progress = await res.json();
 
                         const percent = progress.percentage;
@@ -223,23 +245,17 @@
                                 row.find('.btn-retry').show();
                             });
                         }
-                        console.log(`Accediendo a:${progress.percentage}`);
+
                         if (percent >= 100) {
                             clearInterval(interval);
 
                             // LIMPIEZA: Quitamos las que NO están en la lista de fallidas
-                            //
                             $('.station-row').each(function() {
-                                // Obtenemos el LS quitando el prefijo 'row-' del ID del <tr>
-                                const rowId = $(this).attr('id'); // ejemplo: "row-LS_123"
+                                const rowId = $(this).attr('id');
                                 const ls = rowId.replace('row-', '');
-
-                                // Si este LS NO está en la lista de fallidos, lo removemos
                                 if (!progress.failedList.includes(ls)) {
                                     $(this).fadeOut(800, function() {
                                         $(this).remove();
-
-                                        // Si la tabla queda vacía, podemos ocultar el área
                                         if ($('#bulkBody tr').length === 0) {
                                             $('#bulkArea').fadeOut();
                                         }
@@ -249,8 +265,8 @@
 
                             setTimeout(() => {
                                 $('#loader').fadeOut();
-                                //Clean Input xls
                                 $('#excelInput').val('');
+                                verificarResultados();
                                 Swal.fire('Proceso Finalizado', 'Se procesaron las estaciones. Las que ves en pantalla fallaron y pueden reintentarse.', 'success');
                             }, 2000);
                         }
@@ -263,75 +279,156 @@
             }
         }
 
-        // Funcion para event single: Send only one instance
+        // Procesa todas las estaciones de la tabla.
+        async function startProcessing() {
+            const data = obtenerDatosDeFilas($('.station-row'));
+            await procesarEstaciones(data);
+        }
+
+        // Reintenta una sola estación.
         async function retrySingle(ls) {
             const row = $(`#row-${ls}`);
-            const textarea = row.find('.folio-data');
-
-            const singleData = [{
-                LS: ls,
-                Nombre: textarea.attr('data-nombre'),
-                CR: textarea.attr('data-cr'),
-                FoliosCsv: textarea.val()
-            }];
-
-            row.find('.status-cell').html('<div class="spinner-border spinner-border-sm text-warning"></div>');
+            row.find('.status-cell').html('<span class="badge badge-secondary">Pendiente</span>');
             row.find('.btn-retry').hide();
+            const data = obtenerDatosDeFilas(row);
+            await procesarEstaciones(data);
+        }
 
-            try {
-                const response = await fetch('/Station/ProcessBulk', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(singleData)
-                });
-
-                if (response.ok) {
-                    // Si el reintento funciona, la quitamos de la lista
-                    row.addClass('table-success').fadeOut(1000, function() { $(this).remove(); });
-                    Swal.fire('Reintento Exitoso', `Estación ${ls} procesada.`, 'success');
-                } else {
-                    row.find('.status-cell').html('<span class="badge badge-danger">Falló de nuevo</span>');
-                    row.find('.btn-retry').show();
-                }
-            } catch (e) {
-                row.find('.status-cell').html('<span class="badge badge-danger">Error Red</span>');
-                row.find('.btn-retry').show();
+        // Reintenta las estaciones seleccionadas (checkboxes).
+        async function retrySeleccionados() {
+            const $seleccionadas = $('.select-row:checked').closest('.station-row');
+            if ($seleccionadas.length === 0) {
+                Swal.fire('Atención', 'Selecciona al menos una estación para reintentar.', 'warning');
+                return;
             }
+            $seleccionadas.each(function() {
+                $(this).find('.status-cell').html('<span class="badge badge-secondary">Pendiente</span>');
+                $(this).find('.btn-retry').hide();
+            });
+            const data = obtenerDatosDeFilas($seleccionadas);
+            await procesarEstaciones(data);
         }
 
         document.getElementById('excelInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
+            const esCsv = /\.csv$/i.test(file.name);
             const reader = new FileReader();
+
             reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                let jsonData;
 
-                // 1. Agrupamos los folios por ID de Estación en memoria
-                const groupedData = jsonData.reduce((acc, row) => {
-                    const id = row["EstacionID"] || row["IdEstacion"]; // Detecta ambos nombres
-                    const folio = row["Folio"];
-                    const nombre = row["NombreEstacion"] || row["Nombre"];
-
-                    if (!acc[id]) {
-                        acc[id] = { id, nombre, folios: [] };
+                try {
+                    if (esCsv) {
+                        const texto = String(e.target.result).replace(/^\uFEFF/, '');
+                        const workbook = XLSX.read(texto, { type: 'string' });
+                        jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    } else {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
                     }
-                    acc[id].folios.push(folio);
-                    return acc;
-                }, {});
+                } catch (err) {
+                    console.error(err);
+                    Swal.fire('Error', 'No se pudo leer el archivo. Verifica el formato.', 'error');
+                    return;
+                }
 
-                // 2. Limpiamos y preparamos la carga
-                $('#bulkBody').empty();
-                $('#bulkArea').show();
-
-                // 3. Enviamos los IDs al servidor para obtener CR y LS automáticamente
-                const idsParaValidar = Object.keys(groupedData);
-                obtenerMetadataEstaciones(idsParaValidar, groupedData);
+                procesarDatos(jsonData);
             };
-            reader.readAsArrayBuffer(file);
+
+            if (esCsv) {
+                reader.readAsText(file);
+            } else {
+                reader.readAsArrayBuffer(file);
+            }
         });
+
+        function procesarDatos(jsonData) {
+            const groupedData = jsonData.reduce((acc, row) => {
+                const id = row["EstacionId_1"] || row["IdEstacion"]; // Detecta ambos nombres
+                const nombre = row["Estacion_1"] || row["Nombre"];
+
+                if (id) {
+                    if (!acc[id]) {
+                        acc[id] = {
+                            id: id,
+                            nombre: nombre || `Estacion ${id}`,
+                            folios: new Set()
+                        };
+                    }
+
+                    // 1. Folios desde la columna FoliosTotales (CSV exportado: "f1,f2")
+                    const foliosTotales = row["FoliosTotales"];
+                    if (foliosTotales !== undefined && foliosTotales !== null) {
+                        const limpio = limpiarFolio(foliosTotales);
+                        const partes = String(limpio).split(',');
+                        partes.forEach(parte => {
+                            const folio = parte.trim();
+                            if (folio !== "") {
+                                const folioProcesado = replaceDigit(folio);
+                                if (folioProcesado) acc[id].folios.add(folioProcesado);
+                            }
+                        });
+                    }
+
+                    // 2. Folios desde columnas Folio_1 / Folio_2 / Folio (Excel original)
+                    const columnasFolio = ["Folio_1","Folio_2", "Folio"];
+                    columnasFolio.forEach(col => {
+                        const valorCelda = row[col];
+
+                        // Verificamos que la celda tenga contenido (que no sea undefined, null o vacío)
+                        if (valorCelda !== undefined && valorCelda !== null && String(valorCelda).trim() !== "") {
+                            const folioProcesado = replaceDigit(valorCelda);
+                            if (folioProcesado) {
+                                acc[id].folios.add(folioProcesado);
+                            }
+                        }
+                    });
+                }
+                return acc;
+            }, {});
+
+            // 2. Limpiamos y preparamos la carga
+            $('#bulkBody').empty();
+
+            // 3. Enviamos los IDs al servidor para obtener CR y LS automáticamente
+            const idsParaValidar = Object.keys(groupedData);
+
+            if (idsParaValidar.length > 0) {
+                const finalData = {};
+                for (const id in groupedData) {
+                    finalData[id] = {
+                        id: groupedData[id].id,
+                        nombre: groupedData[id].nombre,
+                        foliosCsv: Array.from(groupedData[id].folios).join(',') // Convertimos el Set a Array y luego a CSV
+                    };
+                }
+                obtenerMetadataEstaciones(idsParaValidar, finalData);
+            } else {
+                Swal.fire('Atención', 'No se encontraron IDs para procesar.', 'warning');
+            }
+        }
+
+        // Quita el wrapper ="" que usa la exportación CSV para forzar texto en Excel.
+        function limpiarFolio(valor) {
+            if (valor === undefined || valor === null) return "";
+            let s = String(valor).trim();
+            if (s.startsWith('="') && s.endsWith('"')) {
+                s = s.slice(2, -1);
+            }
+            return s;
+        }
+
+        function replaceDigit(digit) {
+            if (!digit) return "";
+
+            const isDigit = String(digit);
+            const folionew = isDigit.slice(0, -1);
+            console.log(`Reemplazando último dígito de ${digit}, que es ${folionew}`);
+            return folionew;
+        }
 
         // Función para obtener CR y LS desde el servidor usando los IDs del Excel
         async function obtenerMetadataEstaciones(ids, groupedData) {
@@ -357,18 +454,20 @@
                             m.ls,
                             estacion.nombre,
                             m.cr,
-                            estacion.folios.join(',')
+                            estacion.foliosCsv
                         );
-                    } else {
-                        console.warn(`No se encontró coincidencia para ID: ${m.idEstacion} en los datos del Excel.`);
                     }
                 });
 
-                if(metadata.length > 0) {
-                    Swal.fire('Carga Lista', `Se agruparon ${metadata.length} estaciones con éxito.`, 'success');
-                } else {
-                    Swal.fire('Atención', 'No se encontró información técnica para los IDs del Excel.', 'warning');
-                }
+                // if(metadata.length > 0) {
+                //     Swal.fire('Carga Lista', `Se agruparon ${metadata.length} estaciones con éxito.`, 'success');
+                // } else {
+                //     Swal.fire('Atención', 'No se encontró información técnica para los IDs del Excel.', 'warning');
+                // }
+
+                //
+                $('#bulkArea').show();
+                Swal.fire('Carga Lista', `Se agruparon ${metadata.length} estaciones con éxito.`, 'success');
 
             } catch (err) {
                 console.error("Error en obtenerMetadataEstaciones:", err);
@@ -376,18 +475,62 @@
             }
         }
 
+        function actualizarBotonesResultados() {
+            $('#btnExportarExcel').prop('disabled', !hayResultados);
+            $('#btnEliminarResultados').prop('disabled', !hayResultados);
+        }
+
+        async function verificarResultados() {
+            try {
+                const res = await fetch('/Station/ObtenerConteoResultados');
+                const data = await res.json();
+                hayResultados = data.total > 0;
+                actualizarBotonesResultados();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
         function descargarReporte() {
-            if (!currentSearchId) {
+            if (!hayResultados) {
                 Swal.fire({
                     title: 'Sin datos',
-                    text: 'Primero debes procesar una búsqueda masiva para poder exportar.',
+                    text: 'No hay resultados para exportar.',
                     icon: 'info'
                 });
                 return;
             }
 
-            // Redirigimos al endpoint del controlador pasando el SearchId actual
-            window.location.href = `/Station/DownloadExcel?searchId=${currentSearchId}`;
+            window.location.href = '/Station/DownloadExcel';
+        }
+
+        async function eliminarResultados() {
+            const confirmacion = await Swal.fire({
+                title: '¿Eliminar resultados?',
+                text: 'Se eliminarán todos los resultados de la búsqueda masiva.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            });
+
+            if (!confirmacion.isConfirmed) return;
+
+            try {
+                const res = await fetch('/Station/EliminarResultados', { method: 'POST' });
+                const result = await res.json();
+
+                if (res.ok && result.success) {
+                    hayResultados = false;
+                    actualizarBotonesResultados();
+                    Swal.fire('Eliminado', result.message, 'success');
+                } else {
+                    Swal.fire('Error', result.message || 'No se pudo eliminar la información.', 'error');
+                }
+            } catch (e) {
+                console.error(e);
+                Swal.fire('Error', 'No se pudo eliminar la información.', 'error');
+            }
         }
     </script>
 }

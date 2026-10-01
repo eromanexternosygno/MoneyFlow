@@ -173,11 +173,11 @@ namespace MoneyFlow.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> DownloadExcel(Guid searchId)
+        public async Task<IActionResult> DownloadExcel()
         {
             try
             {
-                var fileBytes = await _stationManager.ExportResultsToExcel(searchId);
+                var fileBytes = await _stationManager.ExportResultsToExcel();
                 string fileName = $"Reporte_Masivo_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
 
                 return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
@@ -185,6 +185,34 @@ namespace MoneyFlow.Controllers
             catch (Exception ex)
             {
                 return BadRequest($"Error al generar Excel: {ex.Message}");
+            }
+        }
+
+        [HttpGet]
+        public IActionResult ObtenerConteoResultados()
+        {
+            try
+            {
+                int total = _stationManager.ObtenerConteoResultados();
+                return Ok(new { total });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        public IActionResult EliminarResultados()
+        {
+            try
+            {
+                _stationManager.TruncarResultados();
+                return Ok(new { success = true, message = "Resultados eliminados correctamente." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = "Error al eliminar: " + ex.Message });
             }
         }
 
