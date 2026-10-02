@@ -60,6 +60,7 @@ builder.Services.AddScoped<IUserManager, UserManager>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<IAuditManager, AuditManager>();
 builder.Services.AddScoped<ITransaccionesProcesadasManager, TransaccionesProcesadasManager>();
+builder.Services.AddScoped<IVolumetricoManager, VolumetricoManager>();
 
 // Configure Hangfire for background processing (file loads, bulk inserts, etc.)
 var hangfireConnectionString = builder.Configuration.GetConnectionString("LocalDb");
